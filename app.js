@@ -1,9 +1,6 @@
-// Importações modulares do Firebase via CDN
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } 
-from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
-// Sua configuração do Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyBDO7buBIdEoImh-LDPrZdd0Ic-240VYe8",
   authDomain: "financamay.firebaseapp.com",
@@ -13,27 +10,60 @@ const firebaseConfig = {
   appId: "1:73695993541:web:f43de30c23e3666e579aac"
 };
 
-// Inicializando Firebase e Firestore
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// Referências aos elementos do DOM
+const db = getFirestore(initializeApp(firebaseConfig));
 const form = document.getElementById('form-financa');
-const listaTransacoes = document.getElementById('lista-transacoes');
-const saldoTotalEl = document.getElementById('saldo-total');
-const ctx = document.getElementById('graficoEconomia').getContext('2d');
+const lista = document.getElementById('lista-transacoes');
+const saldoEl = document.getElementById('saldo-total');
 
-let meuGrafico;
+// Formatação profissional
+const formatar = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-// Função para adicionar nova transação
+// Submit com Validação
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    
-    const descricao = document.getElementById('descricao').value;
-    const valor = parseFloat(document.getElementById('valor').value);
-    const tipo = document.getElementById('tipo').value;
-    const data = document.getElementById('data').value;
+    try {
+        await addDoc(collection(db, "transacoes"), {
+            descricao: document.getElementById('descricao').value,
+            valor: parseFloat(document.getElementById('valor').value),
+            tipo: document.getElementById('tipo').value,
+            data: document.getElementById('data').value,
+            timestamp: Date.now()
+        });
+        Swal.fire('Sucesso!', 'Transação registrada com sucesso.', 'success');
+        form.reset();
+    } catch (err) {
+        Swal.fire('Erro!', 'Falha ao conectar com o banco.', 'error');
+    }
+});
 
+// Deleção com confirmação (Modal)
+lista.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('delete-btn')) {
+        const id = e.target.dataset.id;
+        const result = await Swal.fire({ title: 'Excluir?', text: "Esta ação é irreversível", icon: 'warning', showCancelButton: true });
+        if (result.isConfirmed) await deleteDoc(doc(db, "transacoes", id));
+    }
+});
+
+// Renderização dinâmica
+onSnapshot(query(collection(db, "transacoes"), orderBy("data", "desc")), (snap) => {
+    let saldo = 0;
+    lista.innerHTML = '';
+    snap.forEach((doc) => {
+        const t = doc.data();
+        saldo += (t.tipo === 'entrada' ? t.valor : -t.valor);
+        lista.innerHTML += `
+            <tr class="border-b">
+                <td class="p-3">${t.data}</td>
+                <td class="p-3">${t.descricao}</td>
+                <td class="p-3 font-bold ${t.tipo === 'entrada' ? 'text-green-500' : 'text-red-500'}">${t.tipo.toUpperCase()}</td>
+                <td class="p-3 text-right font-mono">${formatar(t.valor)}</td>
+                <td class="p-3 text-center"><button class="delete-btn text-red-400" data-id="${doc.id}">🗑️</button></td>
+            </tr>
+        `;
+    });
+    saldoEl.innerText = formatar(saldo);
+});
     try {
         await addDoc(collection(db, "transacoes"), {
             descricao,
